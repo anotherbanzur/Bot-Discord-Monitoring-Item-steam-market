@@ -1,8 +1,10 @@
 import json
 import os
+import random
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -77,8 +79,28 @@ def fetch_price(url: str, exchange_rate: Decimal) -> dict:
         },
     )
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
+    retry = 0
+    while retry < 5:
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.load(response)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                wait = 10 + retry * 5
+                print(f"Rate limited by Steam (429). Retrying in {wait} seconds...")
+                time.sleep(wait)
+                retry += 1
+                continue
+            raise
+        except urllib.error.URLError as exc:
+            wait = 5 + retry * 5
+            print(f"Network error: {exc}. Retrying in {wait} seconds...")
+            time.sleep(wait)
+            retry += 1
+            continue
+    else:
+        raise RuntimeError("Failed to fetch Steam price after retries")
 
     if not payload.get("success"):
         raise RuntimeError(payload.get("message", "Steam did not return a valid price payload"))
@@ -128,6 +150,7 @@ def run_once() -> None:
             lines.append(f"- {data['name']}: {data['price']} | {data['price_idr']} | volume: {data['volume']}")
         except Exception as exc:
             lines.append(f"- {parse_item_name(url)}: error - {exc}")
+        time.sleep(5 + random.random() * 5)
 
     message = "\n".join(lines)
     print(message)
