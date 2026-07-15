@@ -131,10 +131,17 @@ def send_to_discord(webhook_url: str, message: str) -> None:
         webhook_url,
         data=payload,
         headers={"Content-Type": "application/json"},
+        method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        if response.status != 204:
-            raise RuntimeError(f"Discord returned unexpected status: {response.status}")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status != 204:
+                raise RuntimeError(f"Discord returned unexpected status: {response.status}")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Discord webhook rejected the request ({exc.code}): {detail}"
+        ) from exc
 
 
 def run_once() -> None:
